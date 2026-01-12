@@ -9658,6 +9658,7 @@ PROGRAM oorb
      out_fname  = TRIM(get_cl_option("--output=","mass_march_results.txt"))
      res_fname  = TRIM(get_cl_option("--residuals=","mass_march_residuals.txt"))
      resolution = get_cl_option("--resolution=",0)
+     orb_out_fname = TRIM(get_cl_option("--orb-out=","mass_march_orbits.txt"))
 
      ALLOCATE(orb_arr(SIZE(storb_arr_in)))
      CALL NULLIFY(epoch)
@@ -9803,12 +9804,19 @@ PROGRAM oorb
              "TRACE BACK (50)", 1)
         STOP        
      END IF
+     !CALL NEW(orb_out_file, TRIM(orb_out_fname))
+     !CALL OPEN(orb_out_file)
+     !IF (error) THEN
+     !   CALL errorMessage("oorb / mass_estimation_march", &
+     !        "TRACE BACK (50)", 1)
+     !   STOP        
+     !END IF
 
      IF (info_verb >= 1) THEN
         WRITE(stdout, *) "Starting mass estimation with the marching method..."
      END IF
      CALL massEstimation_march(storb_arr_in, orb_arr, HG_arr_in, perturbers, &
-          asteroid_perturbers, mass, out_file, res_file, resolution)
+          asteroid_perturbers, mass, out_file, res_file, orb_out_file, resolution)
      IF (info_verb >= 1) THEN
         WRITE(stdout, *) "Mass estimation completed."
         WRITE(stdout, *) "The best-fit mass is ", mass

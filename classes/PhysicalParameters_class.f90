@@ -2301,7 +2301,7 @@ CONTAINS
   !! @author LS, MG, ET
   !!
   SUBROUTINE massEstimation_march(storb_arr, orb_arr, HG_arr, perturbers, &
-       asteroid_perturbers, mass, out_file, residual_file, resolution)
+       asteroid_perturbers, mass, out_file, residual_file, orb_out_file, resolution)
 
     IMPLICIT NONE
     TYPE (StochasticOrbit), DIMENSION(:), INTENT(inout) :: storb_arr
@@ -2310,23 +2310,26 @@ CONTAINS
     logical, intent(in)                                 :: asteroid_perturbers
     type (File), INTENT(in)                             :: out_file
     type (File), INTENT(in)                             :: residual_file
+    type (File), INTENT(in)                             :: orb_out_file
     INTEGER, INTENT(INOUT)                              :: resolution
     REAL(bp), INTENT(in), DIMENSION(:,:)                :: HG_arr
 
     TYPE (Orbit)                                        :: orb
+    TYPE (Orbit), DIMENSION(SIZE(orb_arr))              :: orb_arr_ini
     TYPE (Time)                                         :: t, t_prop
     LOGICAL, DIMENSION(:,:), POINTER                    :: obs_masks
-    REAL(bp), DIMENSION(:,:), ALLOCATABLE               :: chi2_arr
+    REAL(bp), DIMENSION(:,:), ALLOCATABLE               :: chi2_arr, cov, determinants, cov_kep
     REAL(bp), DIMENSION(6)                              :: rms6, elements
     REAL(bp), DIMENSION(:,:), POINTER                   :: additional_perturbers
     REAL(bp), DIMENSION(2)                              :: chi2_arr2
-    REAL(bp), DIMENSION(:), ALLOCATABLE                 :: marching_masses, chi2_sum_arr
+    REAL(bp), DIMENSION(:), ALLOCATABLE                 :: marching_masses, marching_masses1, marching_masses2, chi2_sum_arr
     REAL(bp)                                            :: density, albedo, const, &
          rough_estimate, lower_mass_bound, upper_mass_bound, chi_sum, &
-         mass, avgstdev, rms1, rms2, best_chi, chi_perturber, step, mjd, chi2
+         mass, avgstdev, rms1, rms2, best_chi, chi_perturber, step, mjd, chi2, det
     INTEGER                                             :: i, j
     TYPE (Observations)                                 :: obss
     TYPE (SparseArray)                                  :: resids
+    CHARACTER                                           :: err=''
 
     IF (resolution == 0) THEN
        resolution = 300 ! Default value if resolution is not given.
@@ -2347,22 +2350,39 @@ CONTAINS
     albedo = 0.05_bp
     const = 391222381.5_bp * pi * density * (1.0e12_bp / kg_solar) / (albedo*SQRT(albedo))
     rough_estimate = const*10**(-0.6_bp*HG_arr(1,1))
+    !rough_estimate = 0.2e-11_bp
     WRITE(getUnit(out_file), *) "# Rough mass estimate for march:", rough_estimate
-    lower_mass_bound = 0.01_bp * rough_estimate
-    upper_mass_bound = 10.0_bp * rough_estimate
+    !lower_mass_bound = 0.1_bp * rough_estimate
+    !upper_mass_bound = 10.0_bp * rough_estimate
+    lower_mass_bound = 4.4e-10_bp
+    upper_mass_bound = 5.0e-10_bp
 
-    ALLOCATE(marching_masses(resolution+2))
+    ALLOCATE(marching_masses1((resolution+1)))
+    ALLOCATE(marching_masses2((resolution+1)))
+    ALLOCATE(marching_masses(((resolution+1)*2)+1))
     ALLOCATE(chi2_arr(SIZE(marching_masses),SIZE(orb_arr)))
     ALLOCATE(chi2_sum_arr(SIZE(marching_masses)))
 
-    ! Generates an array of zero mass and a sequence of evenly spaced masses.
-    marching_masses(1) = 0.0_bp
-    step = 1.0_bp/resolution * upper_mass_bound
-    marching_masses(2) = lower_mass_bound
-    DO i=3,SIZE(marching_masses)
-       marching_masses(i) = lower_mass_bound + (i-2) * step
+    ! Generates an array of evenly spaced masses.
+    !marching_masses1(1) = 0.0_bp
+    !marching_masses1(1) = 4.719e-10_bp
+    step = 1.0_bp/resolution * (upper_mass_bound-lower_mass_bound)
+    marching_masses1(1) = lower_mass_bound
+    DO i=2,SIZE(marching_masses1)
+       marching_masses1(i) = lower_mass_bound + (i-1) * step
     END DO
+    WRITE(*,*) "Marching masses1:", marching_masses1
+    ! Flips the array, to start from largest mass
+    marching_masses2 = marching_masses1(SIZE(marching_masses1):1:-1)
+    ! Combine both mass arrays, add zero-mass as first mass
+    marching_masses(1) = 0.0_bp
+    marching_masses(2:(SIZE(marching_masses1)+1)) = marching_masses1
+    marching_masses(SIZE(marching_masses1)+2:) = marching_masses2
+    WRITE(*,*) "Marching masses:",marching_masses
 
+    ALLOCATE(determinants(SIZE(marching_masses),SIZE(orb_arr)))
+    ALLOCATE(cov(6,6),cov_kep(6,6))
+    
     CALL levenbergMarquardt(storb_arr(1), orb_arr(1))
     IF (error) THEN
        CALL errorMessage("PhysicalParameters / massEstimation_march", &
@@ -2388,14 +2408,29 @@ CONTAINS
        RETURN
     END IF
     DEALLOCATE(obs_masks)
+    cov = getCovarianceMatrix(storb_arr(1))
+    det = determinant(cov,err)
     CALL NULLIFY(orb)
+
+    orb_arr_ini = orb_arr
+    WRITE(*,*) "Marching begins!"
+    
     DO i=1,SIZE(marching_masses)
        IF (info_verb >= 2) THEN
           WRITE(stdout,"(A,I0,A,I0)") "Mass #", i, " of ", SIZE(marching_masses)
        END IF
        chi2_arr(i,1) = chi2
+       determinants(i,1) = det
        additional_perturbers(1,8) = marching_masses(i)
        DO j=2,SIZE(storb_arr)
+          IF(i==2) THEN
+             CALL NULLIFY(orb_arr(j))
+             orb_arr(j) = orb_arr_ini(j)
+          END IF 
+          IF (i==SIZE(marching_masses)/2+2) THEN ! Switch back to initial orbit when marching down
+             CALL NULLIFY(orb_arr(j))
+             orb_arr(j) = orb_arr_ini(j)
+          END IF
           CALL setParameters(orb_arr(j), additional_perturbers=additional_perturbers)
           IF (error) THEN
              CALL errorMessage("PhysicalParameters / massEstimation_march", &
@@ -2427,10 +2462,21 @@ CONTAINS
              RETURN
           END IF
           DEALLOCATE(obs_masks)
+          cov = getCovarianceMatrix(storb_arr(j))
+          determinants(i,j) = determinant(cov,err)
+          cov_kep = getCovarianceMatrix(storb_arr(j), "keplerian", "equatorial")
+          elements = getElements(orb, "keplerian", "equatorial")
+          WRITE(getUnit(orb_out_file), *) elements,cov_kep(1,1),cov_kep(2,2),cov_kep(3,3),cov_kep(3,3),&
+               cov_kep(4,4),cov_kep(5,5),cov_kep(6,6)
+          WRITE(*,*) "Current orbit:", getElements(orb_arr(j), "keplerian", "equatorial")
+          CALL NULLIFY(orb_arr(j))
+          orb_arr(j) = copy(orb)
+          WRITE(*,*) "Updated orbit:", getElements(orb_arr(j), "keplerian", "equatorial")
           CALL NULLIFY(orb)
-       END DO
+       END DO 
        chi2_sum_arr(i) = SUM(chi2_arr(i,:))
-       WRITE(getUnit(out_file), *) marching_masses(i), chi2_arr(i,:), chi2_sum_arr(i), i
+       WRITE(getUnit(out_file), *) marching_masses(i), chi2_arr(i,:), chi2_sum_arr(i), &
+            determinants(i,:), i
     END DO
     mass = marching_masses(MINLOC(chi2_sum_arr,dim=1))
     WRITE(getUnit(out_file), *) "# Best mass: ", mass

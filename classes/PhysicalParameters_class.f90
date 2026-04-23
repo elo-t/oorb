@@ -2322,7 +2322,8 @@ CONTAINS
     REAL(bp), DIMENSION(6)                              :: rms6, elements
     REAL(bp), DIMENSION(:,:), POINTER                   :: additional_perturbers
     REAL(bp), DIMENSION(2)                              :: chi2_arr2
-    REAL(bp), DIMENSION(:), ALLOCATABLE                 :: marching_masses, marching_masses1, marching_masses2, chi2_sum_arr
+    REAL(bp), DIMENSION(:), ALLOCATABLE                 :: marching_masses, marching_masses1, marching_masses2, marching_masses3,&
+         chi2_sum_arr
     REAL(bp)                                            :: density, albedo, const, &
          rough_estimate, lower_mass_bound, upper_mass_bound, chi_sum, &
          mass, avgstdev, rms1, rms2, best_chi, chi_perturber, step, mjd, chi2, det
@@ -2349,17 +2350,19 @@ CONTAINS
     density = 1.0_bp ! g/cm3
     albedo = 0.05_bp
     const = 391222381.5_bp * pi * density * (1.0e12_bp / kg_solar) / (albedo*SQRT(albedo))
-    rough_estimate = const*10**(-0.6_bp*HG_arr(1,1))
-    !rough_estimate = 0.2e-11_bp
+    !rough_estimate = const*10**(-0.6_bp*HG_arr(1,1))
+    rough_estimate = 1.2e-11_bp
     WRITE(getUnit(out_file), *) "# Rough mass estimate for march:", rough_estimate
-    !lower_mass_bound = 0.1_bp * rough_estimate
-    !upper_mass_bound = 10.0_bp * rough_estimate
-    lower_mass_bound = 4.4e-10_bp
-    upper_mass_bound = 5.0e-10_bp
+    lower_mass_bound = 0.1_bp * rough_estimate
+    upper_mass_bound = 10.0_bp * rough_estimate
+    !lower_mass_bound = 0.1_bp * rough_estimate ! If you need to specify the mass interval.
+    !upper_mass_bound = 0.4e-10_bp
 
     ALLOCATE(marching_masses1((resolution+1)))
     ALLOCATE(marching_masses2((resolution+1)))
-    ALLOCATE(marching_masses(((resolution+1)*2)+1))
+    ALLOCATE(marching_masses3(((resolution+1)*2)+1))
+    ALLOCATE(marching_masses(SIZE(marching_masses3)))
+    !ALLOCATE(marching_masses(SIZE(marching_masses3)*2))
     ALLOCATE(chi2_arr(SIZE(marching_masses),SIZE(orb_arr)))
     ALLOCATE(chi2_sum_arr(SIZE(marching_masses)))
 
@@ -2375,9 +2378,16 @@ CONTAINS
     ! Flips the array, to start from largest mass
     marching_masses2 = marching_masses1(SIZE(marching_masses1):1:-1)
     ! Combine both mass arrays, add zero-mass as first mass
-    marching_masses(1) = 0.0_bp
-    marching_masses(2:(SIZE(marching_masses1)+1)) = marching_masses1
-    marching_masses(SIZE(marching_masses1)+2:) = marching_masses2
+    marching_masses3(1) = 0.0_bp
+    marching_masses3(2:(SIZE(marching_masses1)+1)) = marching_masses1
+    marching_masses3(SIZE(marching_masses1)+2:) = marching_masses2
+    marching_masses = marching_masses3
+    ! Uncomment the code block below if you want to repeat each mass twice
+    ! and uncomment ALLOCATE(marching_masses(SIZE(marching_masses3)*2)) some lines up
+    !DO i=1,SIZE(marching_masses3)
+    !   marching_masses(2*i-1) = marching_masses3(i)
+    !   marching_masses(2*i) = marching_masses3(i)
+    !ENDDO
     WRITE(*,*) "Marching masses:",marching_masses
 
     ALLOCATE(determinants(SIZE(marching_masses),SIZE(orb_arr)))
@@ -2466,7 +2476,7 @@ CONTAINS
           determinants(i,j) = determinant(cov,err)
           cov_kep = getCovarianceMatrix(storb_arr(j), "keplerian", "equatorial")
           elements = getElements(orb, "keplerian", "equatorial")
-          WRITE(getUnit(orb_out_file), *) elements,cov_kep(1,1),cov_kep(2,2),cov_kep(3,3),cov_kep(3,3),&
+          WRITE(getUnit(orb_out_file), *) marching_masses(i), elements,cov_kep(1,1),cov_kep(2,2),cov_kep(3,3),&
                cov_kep(4,4),cov_kep(5,5),cov_kep(6,6)
           WRITE(*,*) "Current orbit:", getElements(orb_arr(j), "keplerian", "equatorial")
           CALL NULLIFY(orb_arr(j))
@@ -2488,9 +2498,6 @@ CONTAINS
     END IF
 
   END SUBROUTINE massEstimation_march
-
-
-
 
 
 END MODULE PhysicalParameters_cl

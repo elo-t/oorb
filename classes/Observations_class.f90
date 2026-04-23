@@ -4729,7 +4729,7 @@ CONTAINS
 
 
 
-    CASE ("gdr2", "gdr3", "gfpr", "cgdr3")
+    CASE ("gdr2", "gdr3", "gfpr", "cgdr3", "cgfpr")
 
        ! Full SSO data dump from Gaia Data Release 2, 3, or the Focused Project Release.
        covariance = 0.0_bp
@@ -4790,6 +4790,16 @@ CONTAINS
                   g_mag, g_flux, g_flux_err, coordinates(1:6), gaia_geocentric(1:6), &
                   position_angle_scan, astrometric_outcome_transit, & 
                   x_offset, x_err, y_offset, y_err, z_offset, z_err, position(1)
+           ELSE IF (suffix == "cgfpr") THEN
+             READ(line, *, iostat=err) solution_id, source_id, &
+                  denomination, transit_id, observation_id, number, epoch, &
+                  epoch_err, epoch_utc, position(2), position(3), covariance_sys(2,2), &
+                  covariance_sys(3,3), covariance_sys(2,3), &
+                  covariance(2,2), covariance(3,3), covariance(2,3), &
+                  coordinates(1:6), gaia_geocentric(1:6), &
+                  position_angle_scan, astrometric_outcome_ccd, astrometric_outcome_transit, &
+                  fov, obs_rejected_by_fit, & 
+                  x_offset, x_err, y_offset, y_err, z_offset, z_err, position(1)
           END IF
           IF (err /= 0) THEN
              error = .TRUE.
@@ -4811,7 +4821,7 @@ CONTAINS
           ! Convert RA & Dec from degrees to radians
           position(2:3) = position(2:3)*rad_deg
 
-          IF (suffix == "cgdr3") THEN
+          IF ((suffix == "cgdr3") .OR. (suffix == "cgfpr")) THEN
              ra_ini = position(2)/rad_deg
              dec_ini = position(3)/rad_deg
              ! new spherical coordinate object from position vector

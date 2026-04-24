@@ -2301,7 +2301,7 @@ CONTAINS
   !! @author LS, MG, ET
   !!
   SUBROUTINE massEstimation_march(storb_arr, orb_arr, HG_arr, perturbers, &
-       asteroid_perturbers, mass, out_file, residual_file, orb_out_file, resolution)
+       asteroid_perturbers, mass, out_file, residual_file, orb_out_file, resolution, rough_estimate)
 
     IMPLICIT NONE
     TYPE (StochasticOrbit), DIMENSION(:), INTENT(inout) :: storb_arr
@@ -2312,6 +2312,7 @@ CONTAINS
     type (File), INTENT(in)                             :: residual_file
     type (File), INTENT(in)                             :: orb_out_file
     INTEGER, INTENT(INOUT)                              :: resolution
+    REAL(bp), INTENT(INOUT)                                :: rough_estimate
     REAL(bp), INTENT(in), DIMENSION(:,:)                :: HG_arr
 
     TYPE (Orbit)                                        :: orb
@@ -2325,7 +2326,7 @@ CONTAINS
     REAL(bp), DIMENSION(:), ALLOCATABLE                 :: marching_masses, marching_masses1, marching_masses2, marching_masses3,&
          chi2_sum_arr
     REAL(bp)                                            :: density, albedo, const, &
-         rough_estimate, lower_mass_bound, upper_mass_bound, chi_sum, &
+         lower_mass_bound, upper_mass_bound, chi_sum, &
          mass, avgstdev, rms1, rms2, best_chi, chi_perturber, step, mjd, chi2, det
     INTEGER                                             :: i, j
     TYPE (Observations)                                 :: obss
@@ -2347,11 +2348,13 @@ CONTAINS
     END IF
 
     ! Rough mass estimate to sample in approximately right range:
-    density = 1.0_bp ! g/cm3
-    albedo = 0.05_bp
-    const = 391222381.5_bp * pi * density * (1.0e12_bp / kg_solar) / (albedo*SQRT(albedo))
-    !rough_estimate = const*10**(-0.6_bp*HG_arr(1,1))
-    rough_estimate = 1.2e-11_bp
+    !rough_estimate = rough_estimate * kg_solar
+    IF (rough_estimate == 0) THEN ! If no rough estimate is given as a command line parameter
+       density = 1.0_bp ! g/cm3
+       albedo = 0.05_bp
+       const = 391222381.5_bp * pi * density * (1.0e12_bp / kg_solar) / (albedo*SQRT(albedo))
+       rough_estimate = const*10**(-0.6_bp*HG_arr(1,1))
+    END IF
     WRITE(getUnit(out_file), *) "# Rough mass estimate for march:", rough_estimate
     lower_mass_bound = 0.1_bp * rough_estimate
     upper_mass_bound = 10.0_bp * rough_estimate
@@ -2367,8 +2370,6 @@ CONTAINS
     ALLOCATE(chi2_sum_arr(SIZE(marching_masses)))
 
     ! Generates an array of evenly spaced masses.
-    !marching_masses1(1) = 0.0_bp
-    !marching_masses1(1) = 4.719e-10_bp
     step = 1.0_bp/resolution * (upper_mass_bound-lower_mass_bound)
     marching_masses1(1) = lower_mass_bound
     DO i=2,SIZE(marching_masses1)

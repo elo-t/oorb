@@ -310,7 +310,7 @@ PROGRAM oorb
        step, sun_moon_r2, sunlat, sunlon, &
        timespan, tlat, tlon, toclat, toclon, tsclat, tsclon, &
        ta_s, ta_c, fak, ecc_anom, true_anom, chi2, chi2_min, &
-       mass, density, albedo, const
+       mass, density, albedo, const, rough_estimate
   INTEGER, DIMENSION(:), POINTER :: &
        repetition_arr_cmp => NULL(), &
        repetition_arr_in => NULL()
@@ -9659,6 +9659,7 @@ PROGRAM oorb
      res_fname  = TRIM(get_cl_option("--residuals=","mass_march_residuals.txt"))
      resolution = get_cl_option("--resolution=",0)
      orb_out_fname = TRIM(get_cl_option("--orb-out=","mass_march_orbits.txt"))
+     rough_estimate = get_cl_option("--rough-estimate=",0.0_bp)
 
      ALLOCATE(orb_arr(SIZE(storb_arr_in)))
      CALL NULLIFY(epoch)
@@ -9816,7 +9817,7 @@ PROGRAM oorb
         WRITE(stdout, *) "Starting mass estimation with the marching method..."
      END IF
      CALL massEstimation_march(storb_arr_in, orb_arr, HG_arr_in, perturbers, &
-          asteroid_perturbers, mass, out_file, res_file, orb_out_file, resolution)
+          asteroid_perturbers, mass, out_file, res_file, orb_out_file, resolution, rough_estimate)
      IF (info_verb >= 1) THEN
         WRITE(stdout, *) "Mass estimation completed."
         WRITE(stdout, *) "The best-fit mass is ", mass

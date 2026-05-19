@@ -2362,10 +2362,13 @@ CONTAINS
     !upper_mass_bound = 0.4e-10_bp
 
     ALLOCATE(marching_masses1((resolution+1)))
-    ALLOCATE(marching_masses2((resolution+1)))
-    ALLOCATE(marching_masses3(((resolution+1)*2)+1))
-    ALLOCATE(marching_masses(SIZE(marching_masses3)))
+    !!
+    !ALLOCATE(marching_masses2((resolution+1)))
+    !ALLOCATE(marching_masses3(((resolution+1)*2)+1))
+    !ALLOCATE(marching_masses(SIZE(marching_masses3)))
     !ALLOCATE(marching_masses(SIZE(marching_masses3)*2))
+    !!
+    ALLOCATE(marching_masses(SIZE(marching_masses1)+1))
     ALLOCATE(chi2_arr(SIZE(marching_masses),SIZE(orb_arr)))
     ALLOCATE(chi2_sum_arr(SIZE(marching_masses)))
 
@@ -2376,19 +2379,25 @@ CONTAINS
        marching_masses1(i) = lower_mass_bound + (i-1) * step
     END DO
     WRITE(*,*) "Marching masses1:", marching_masses1
-    ! Flips the array, to start from largest mass
-    marching_masses2 = marching_masses1(SIZE(marching_masses1):1:-1)
+    ! Add zero-mass as first mass
+    marching_masses(1) = 0.0_bp  
+    ! Flip the array, to start from largest mass, combine to final array
+    marching_masses(2:(SIZE(marching_masses1)+1)) = marching_masses1(SIZE(marching_masses1):1:-1)
+
+    !! 
     ! Combine both mass arrays, add zero-mass as first mass
-    marching_masses3(1) = 0.0_bp
-    marching_masses3(2:(SIZE(marching_masses1)+1)) = marching_masses1
-    marching_masses3(SIZE(marching_masses1)+2:) = marching_masses2
-    marching_masses = marching_masses3
+    !marching_masses3(1) = 0.0_bp
+    !marching_masses3(2:(SIZE(marching_masses1)+1)) = marching_masses1
+    !marching_masses3(SIZE(marching_masses1)+2:) = marching_masses2
+    !marching_masses = marching_masses3
     ! Uncomment the code block below if you want to repeat each mass twice
     ! and uncomment ALLOCATE(marching_masses(SIZE(marching_masses3)*2)) some lines up
     !DO i=1,SIZE(marching_masses3)
     !   marching_masses(2*i-1) = marching_masses3(i)
     !   marching_masses(2*i) = marching_masses3(i)
     !ENDDO
+    !!
+
     WRITE(*,*) "Marching masses:",marching_masses
 
     ALLOCATE(determinants(SIZE(marching_masses),SIZE(orb_arr)))
@@ -2433,15 +2442,17 @@ CONTAINS
        chi2_arr(i,1) = chi2
        determinants(i,1) = det
        additional_perturbers(1,8) = marching_masses(i)
-       DO j=2,SIZE(storb_arr)
-          IF(i==2) THEN
+       DO j=2,SIZE(storb_arr) 
+          IF(i==2) THEN ! Switch back to initial orbit after zero-mass
              CALL NULLIFY(orb_arr(j))
              orb_arr(j) = orb_arr_ini(j)
           END IF 
-          IF (i==SIZE(marching_masses)/2+2) THEN ! Switch back to initial orbit when marching down
-             CALL NULLIFY(orb_arr(j))
-             orb_arr(j) = orb_arr_ini(j)
-          END IF
+          !!
+          !IF (i==SIZE(marching_masses)/2+2) THEN ! Switch back to initial orbit when marching down
+          !   CALL NULLIFY(orb_arr(j))
+          !   orb_arr(j) = orb_arr_ini(j)
+          !END IF
+          !!
           CALL setParameters(orb_arr(j), additional_perturbers=additional_perturbers)
           IF (error) THEN
              CALL errorMessage("PhysicalParameters / massEstimation_march", &

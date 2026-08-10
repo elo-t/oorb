@@ -57,6 +57,7 @@ MODULE planetary_data
   USE linal
   USE sort
   USE utilities
+  USE cl_options
   IMPLICIT NONE
   PRIVATE
   CHARACTER(len=FNAME_LEN), PARAMETER :: EPH_FNAME = 'de430.dat'
@@ -1613,6 +1614,8 @@ CONTAINS
     END IF
 
     fname = TRIM(OORB_DATA_DIR) // "/asteroid_indices.txt"
+    ! asteroid_indices.txt as optional command line parameter
+    fname = TRIM(get_cl_option("--asteroid-indices=",fname))
     OPEN(unit=lu, file=TRIM(fname), status='OLD', action='READ', iostat=err)
     IF (err /= 0) THEN
        error = .TRUE.
